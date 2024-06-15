@@ -64,10 +64,10 @@ jobs:
  
       - name: Build Binary
         run: cross build --verbose --locked --release --target ${{ matrix.target }}
-
-      - name: Rename Binary
-        run: mv "target/${{ matrix.target }}/release/ezg-api" "target/${{ matrix.target }}/release/${{ matrix.name }}"
-
+#
+#      - name: Rename Binary
+#        run: mv "target/${{ matrix.target }}/release/ezg-api" "target/${{ matrix.target }}/release/${{ matrix.name }}"
+#
       - name: Upload Built Binary
         env:
           GH_TOKEN: ${{ github.token }}
