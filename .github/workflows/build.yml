@@ -1,7 +1,7 @@
 name: Build
 on:
   push:
-    branches: ["main"]
+    branches: ["main", "f-actions"]
 jobs:
   release:
     name: Create GitHub Release
@@ -29,8 +29,7 @@ jobs:
         GH_REPO: ${{ github.repository }}
       run: |
         tag="${{ steps.tag.outputs.tag }}"
-        body="ruby/ruby@${{ needs.prepare.outputs.commit }}"
-        gh release create --draft "$tag" --title "$tag" --notes "$body"
+        gh release create --draft "$tag" --title "$tag" --generate-notes
   build:
     runs-on: ${{ matrix.runner }}
     needs: [release]
