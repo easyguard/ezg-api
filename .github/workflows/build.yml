@@ -1,0 +1,80 @@
+name: Build
+on:
+  push:
+    branches: ["main"]
+jobs:
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+      if: github.event_name != 'push'
+
+    - name: Set tag name
+      id: tag
+      run: |
+        if [[ "${{ github.event_name }}" != "push" ]]; then
+          tag=v$(date +%Y%m%d.%H%M%S)
+        else
+          tag=$(basename "${{ github.ref }}")
+        fi
+        echo "tag=$tag" >> $GITHUB_OUTPUT
+    - name: Create Release
+      env:
+        GH_TOKEN: ${{ github.token }}
+        GH_REPO: ${{ github.repository }}
+      run: |
+        tag="${{ steps.tag.outputs.tag }}"
+        body="ruby/ruby@${{ needs.prepare.outputs.commit }}"
+        gh release create --draft "$tag" --title "$tag" --notes "$body"
+  build:
+    runs-on: ${{ matrix.runner }}
+    needs: [release]
+    strategy:
+      matrix:
+        include:
+          # Alpine x86_64
+          - name: musl-x86_64
+            runner: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+          # Alpine arm64
+          - name: musl-arm64
+            runner: ubuntu-latest
+            target: aarch64-unkown-linux-musl
+ 
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+ 
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+ 
+      - name: Install Cross
+        shell: bash
+        run: |
+          curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
+          cargo binstall --no-confirm cross
+ 
+      - name: Build Binary
+        run: cross build --verbose --locked --release --target ${{ matrix.target }}
+
+      - name: Upload Built Binary
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release upload "${{ needs.release.outputs.tag }}" "target/${{ matrix.target }}/release/ezg-api"
+
+  publish:
+    name: Publish Release
+    needs: [release, build]
+    runs-on: ubuntu-latest
+    steps:
+    - name: Publish Release
+      env:
+        GH_TOKEN: ${{ github.token }}
+        GH_REPO: ${{ github.repository }}
+      run: gh release edit "${{ needs.release.outputs.tag }}" --draft=false
