@@ -7,7 +7,8 @@ use tide::prelude::*;
 use std::fs;
 use std::path::Path;
 
-const EZG_ROOT: &str = "/etc/easyguard";
+// const EZG_ROOT: &str = "/etc/easyguard";
+const CONFIG_ROOT: &str = "/etc/config";
 
 #[derive(Debug, Deserialize)]
 struct FirewallRule {
@@ -34,8 +35,10 @@ async fn main() -> tide::Result<()> {
 	app.at("/api/firewall").get(get_firewall);
 	app.at("/api/firewall/rule").put(put_firewall_rule);
 	app.at("/api/firewall/rule").delete(delete_firewall_rule);
-	app.at("/api/dns").get(get_dns);
-	app.at("/api/dns").patch(patch_dns);
+	// app.at("/api/dns").get(get_dns);
+	// app.at("/api/dns").patch(patch_dns);
+	// app.at("/api/leases").get(get_leases);
+	// app.at("/api/mac").post(get_mac);
 	app.at("/api/*").all(err404);
 
 	let cors = CorsMiddleware::new()
@@ -53,19 +56,38 @@ async fn err404(mut req: Request<()>) -> tide::Result {
 }
 
 async fn get_firewall(mut req: Request<()>) -> tide::Result {
-	let firewall_text = fs::read_to_string(Path::new(EZG_ROOT).join("firewall.json")).expect("Unable to read file");
+	let firewall_text = fs::read_to_string(Path::new(CONFIG_ROOT).join("firewall.json")).expect("Unable to read file");
 	println!("{}", firewall_text);
 	Ok(firewall_text.into())
 }
+
+// async fn get_leases(mut req: Request<()>) -> tide::Result {
+// 	let leases_text = fs::read_to_string(Path::new(EZG_ROOT).join("dhcp_leases.json")).expect("Unable to read file");
+// 	println!("{}", leases_text);
+// 	Ok(leases_text.into())
+// }
+
+// async fn get_mac(mut req: Request<()>) -> tide::Result {
+// 	let mac = req.body_string().await?;
+
+// 	let output = std::process::Command::new("bash")
+// 		.current_dir(EZG_ROOT)
+// 		.arg(Path::new(EZG_ROOT).join("maclookup.sh").to_str().unwrap())
+// 		.arg(mac)
+// 		.output()
+// 		.expect("failed to execute process");
+
+// 	Ok(String::from_utf8(output.stdout).unwrap().into())
+// }
 
 async fn put_firewall_rule(mut req: Request<()>) -> tide::Result {
 	let FirewallPath { zone, chain, rule } = req.body_json().await?; // { "zone": "zoneName", "chain": "chainName", "rule": {<object to add>} }
 
 	// run bash script to add rule
-	let output = std::process::Command::new("bash")
-		.current_dir(EZG_ROOT)
-		.arg(Path::new(EZG_ROOT).join("ezg").to_str().unwrap())
-		.arg("firewall")
+	let output = std::process::Command::new("limes")
+		// .current_dir(EZG_ROOT)
+		// .arg(Path::new(EZG_ROOT).join("ezg").to_str().unwrap())
+		// .arg("firewall")
 		.arg("rule")
 		.arg(zone)
 		.arg(chain)
@@ -82,10 +104,10 @@ async fn delete_firewall_rule(mut req: Request<()>) -> tide::Result {
 	let FirewallPath { zone, chain, rule } = req.body_json().await?; // { "zone": "zoneName", "chain": "chainName", "rule": {<object to add>} }
 
 	// run bash script to add rule
-	let output = std::process::Command::new("bash")
-		.current_dir(EZG_ROOT)
-		.arg(Path::new(EZG_ROOT).join("ezg").to_str().unwrap())
-		.arg("firewall")
+	let output = std::process::Command::new("limes")
+		// .current_dir(EZG_ROOT)
+		// .arg(Path::new(EZG_ROOT).join("ezg").to_str().unwrap())
+		// .arg("firewall")
 		.arg("rule")
 		.arg(zone)
 		.arg(chain)
@@ -98,28 +120,28 @@ async fn delete_firewall_rule(mut req: Request<()>) -> tide::Result {
 	Ok("{\"success\": true}".into())
 }
 
-async fn get_dns(mut req: Request<()>) -> tide::Result {
-	let dns_text = fs::read_to_string(Path::new(EZG_ROOT).join("dns.json")).expect("Unable to read file");
-	println!("{}", dns_text);
-	Ok(dns_text.into())
-}
+// async fn get_dns(mut req: Request<()>) -> tide::Result {
+// 	let dns_text = fs::read_to_string(Path::new(EZG_ROOT).join("dns.json")).expect("Unable to read file");
+// 	println!("{}", dns_text);
+// 	Ok(dns_text.into())
+// }
 
-async fn patch_dns(mut req: Request<()>) -> tide::Result {
-	let DNSPatch { option, value } = req.body_json().await?;
+// async fn patch_dns(mut req: Request<()>) -> tide::Result {
+// 	let DNSPatch { option, value } = req.body_json().await?;
 
-	// run bash script to add rule
-	let output = std::process::Command::new("bash")
-		.current_dir(EZG_ROOT)
-		.arg(Path::new(EZG_ROOT).join("ezg").to_str().unwrap())
-		.arg("dns")
-		.arg("set")
-		.arg(option)
-		.arg(value)
-		.output()
-		.expect("failed to execute process");
+// 	// run bash script to add rule
+// 	let output = std::process::Command::new("bash")
+// 		.current_dir(EZG_ROOT)
+// 		.arg(Path::new(EZG_ROOT).join("ezg").to_str().unwrap())
+// 		.arg("dns")
+// 		.arg("set")
+// 		.arg(option)
+// 		.arg(value)
+// 		.output()
+// 		.expect("failed to execute process");
 
-	Ok("{\"success\": true}".into())
-}
+// 	Ok("{\"success\": true}".into())
+// }
 
 // async fn order_shoes(mut req: Request<()>) -> tide::Result {
 // 	let Animal { name, legs } = req.body_json().await?;
