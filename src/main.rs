@@ -2,10 +2,15 @@ use tide::http::headers::HeaderValue;
 use tide::security::CorsMiddleware;
 use tide::security::Origin;
 use tide::Error;
+use tide::Next;
 use tide::Request;
 use tide::prelude::*;
+use tide::Response;
+use tide::StatusCode;
 use std::fs;
+use std::future::Future;
 use std::path::Path;
+use std::pin::Pin;
 
 // const EZG_ROOT: &str = "/etc/easyguard";
 const CONFIG_ROOT: &str = "/etc/config";
@@ -29,9 +34,67 @@ struct DNSPatch {
 	value: String
 }
 
+// Authenticate users against /etc/shadow
+fn authenticate_user(username: &str, password: &str) -> bool {
+	let hash = shadow::Shadow::from_name(username);
+	if hash.is_none() {
+		return false;
+	}
+	let hash = hash.unwrap();
+	let correct = pwhash::unix::verify(password, &hash.password);
+	return correct;
+}
+
+fn auth_middleware<'a>(
+	request: Request<()>,
+	next: Next<'a, ()>,
+) -> Pin<Box<dyn Future<Output = tide::Result> + Send + 'a>> {
+	// Authorization: Basic <base64(username:password)>
+	let auth_header = request.header("Authorization");
+	if auth_header.is_none() {
+		let res = Response::new(StatusCode::Unauthorized);
+		return Box::pin(async { Ok(res) });
+	}
+	let auth_header = auth_header.unwrap();
+	let auth_header = auth_header.get(0).unwrap();
+	let auth_header = auth_header.as_str();
+	let auth_header = auth_header.split_whitespace().collect::<Vec<&str>>();
+	if auth_header.len() != 2 {
+		let res = Response::new(StatusCode::Unauthorized);
+		return Box::pin(async { Ok(res.into()) });
+	}
+	let auth_header = auth_header[1];
+	let auth_header = base64::decode(auth_header).unwrap();
+	let auth_header = String::from_utf8(auth_header).unwrap();
+	let auth_header = auth_header.split(":").collect::<Vec<&str>>();
+	if auth_header.len() != 2 {
+		let res = Response::new(StatusCode::Unauthorized);
+		return Box::pin(async { Ok(res.into()) });
+	}
+	let username = auth_header[0];
+	let password = auth_header[1];
+	if !authenticate_user(username, password) {
+		let res = Response::new(StatusCode::Unauthorized);
+		return Box::pin(async { Ok(res.into()) });
+	}
+	Box::pin(async move {
+		Ok(next.run(request).await)
+	})
+}
+
 #[async_std::main]
 async fn main() -> tide::Result<()> {
 	let mut app = tide::new();
+
+	let cors = CorsMiddleware::new()
+    .allow_methods("GET, PUT, DELETE, POST, PATCH, OPTIONS".parse::<HeaderValue>().unwrap())
+    .allow_origin(Origin::from("*"))
+    .allow_credentials(false);
+	app.with(cors);
+
+	// Require authentication for all routes
+	app.with(auth_middleware);
+	app.at("/api/ping").get(|_| async { Ok("pong") });
 	app.at("/api/firewall").get(get_firewall);
 	app.at("/api/firewall/rule").put(put_firewall_rule);
 	app.at("/api/firewall/rule").delete(delete_firewall_rule);
@@ -40,12 +103,6 @@ async fn main() -> tide::Result<()> {
 	// app.at("/api/leases").get(get_leases);
 	// app.at("/api/mac").post(get_mac);
 	app.at("/api/*").all(err404);
-
-	let cors = CorsMiddleware::new()
-    .allow_methods("GET, PUT, DELETE, POST, PATCH, OPTIONS".parse::<HeaderValue>().unwrap())
-    .allow_origin(Origin::from("*"))
-    .allow_credentials(false);
-	app.with(cors);
 
 	app.listen("0.0.0.0:8080").await?;
 	Ok(())
