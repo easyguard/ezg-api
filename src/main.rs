@@ -102,11 +102,11 @@ async fn main() -> tide::Result<()> {
 	Ok(())
 }
 
-async fn err404(mut req: Request<()>) -> tide::Result {
+async fn err404(mut _req: Request<()>) -> tide::Result {
 	Err(Error::from_str(404, "Not Found"))
 }
 
-async fn get_firewall(mut req: Request<()>) -> tide::Result {
+async fn get_firewall(mut _req: Request<()>) -> tide::Result {
 	let firewall_text = fs::read_to_string(Path::new(CONFIG_ROOT).join("firewall.json")).expect("Unable to read file");
 	println!("{}", firewall_text);
 	Ok(firewall_text.into())
@@ -135,7 +135,7 @@ async fn put_firewall_rule(mut req: Request<()>) -> tide::Result {
 	let FirewallPath { zone, chain, rule } = req.body_json().await?; // { "zone": "zoneName", "chain": "chainName", "rule": {<object to add>} }
 
 	// run bash script to add rule
-	let output = std::process::Command::new("limes")
+	std::process::Command::new("limes")
 		// .current_dir(EZG_ROOT)
 		// .arg(Path::new(EZG_ROOT).join("ezg").to_str().unwrap())
 		// .arg("firewall")
@@ -155,7 +155,7 @@ async fn delete_firewall_rule(mut req: Request<()>) -> tide::Result {
 	let FirewallPath { zone, chain, rule } = req.body_json().await?; // { "zone": "zoneName", "chain": "chainName", "rule": {<object to add>} }
 
 	// run bash script to add rule
-	let output = std::process::Command::new("limes")
+	std::process::Command::new("limes")
 		// .current_dir(EZG_ROOT)
 		// .arg(Path::new(EZG_ROOT).join("ezg").to_str().unwrap())
 		// .arg("firewall")
@@ -171,7 +171,7 @@ async fn delete_firewall_rule(mut req: Request<()>) -> tide::Result {
 	Ok("{\"success\": true}".into())
 }
 
-async fn get_dns(mut req: Request<()>) -> tide::Result {
+async fn get_dns(mut _req: Request<()>) -> tide::Result {
 	let dns_text = fs::read_to_string("/etc/blocky/config.yml").expect("Unable to read file");
 	println!("{}", dns_text);
 	Ok(dns_text.into())
