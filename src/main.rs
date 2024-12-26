@@ -95,6 +95,8 @@ async fn main() -> tide::Result<()> {
 	app.at("/api/firewall/rule").delete(delete_firewall_rule);
 	app.at("/api/dns").get(get_dns);
 	app.at("/api/dns").patch(patch_dns);
+	app.at("/api/network").get(get_network);
+	app.at("/api/network").patch(patch_network);
 	// app.at("/api/leases").get(get_leases);
 	// app.at("/api/mac").post(get_mac);
 	app.at("/api/*").all(err404);
@@ -199,5 +201,18 @@ async fn patch_dns(mut req: Request<()>) -> tide::Result {
 		.arg("restart")
 		.output()
 		.expect("failed to execute process");
+	Ok("{\"success\": true}".into())
+}
+
+async fn get_network(mut _req: Request<()>) -> tide::Result {
+	let network_text = fs::read_to_string(Path::new(CONFIG_ROOT).join("network.toml")).expect("Unable to read file");
+	println!("{}", network_text);
+	Ok(network_text.into())
+}
+
+async fn patch_network(mut req: Request<()>) -> tide::Result {
+	fs::rename(Path::new(CONFIG_ROOT).join("network.toml"), Path::new(CONFIG_ROOT).join("network.toml.bak")).expect("Unable to rename file");
+	let network_text = req.body_string().await?;
+	fs::write(Path::new(CONFIG_ROOT).join("network.toml"), network_text).expect("Unable to write file");
 	Ok("{\"success\": true}".into())
 }
