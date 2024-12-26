@@ -89,6 +89,7 @@ async fn main() -> tide::Result<()> {
 	// Require authentication for all routes
 	app.with(auth_middleware);
 	app.at("/api/ping").get(|_| async { Ok("pong") });
+	app.at("/api/commit").post(commit);
 	app.at("/api/firewall").get(get_firewall);
 	app.at("/api/firewall/rule").put(put_firewall_rule);
 	app.at("/api/firewall/rule").delete(delete_firewall_rule);
@@ -104,6 +105,15 @@ async fn main() -> tide::Result<()> {
 
 async fn err404(mut _req: Request<()>) -> tide::Result {
 	Err(Error::from_str(404, "Not Found"))
+}
+
+async fn commit(mut _req: Request<()>) -> tide::Result {
+	std::process::Command::new("lbu")
+		.arg("ci")
+		.arg("-d")
+		.output()
+		.expect("failed to execute process");
+	Ok("{\"success\": true}".into())
 }
 
 async fn get_firewall(mut _req: Request<()>) -> tide::Result {
