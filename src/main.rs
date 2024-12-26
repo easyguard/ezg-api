@@ -28,12 +28,6 @@ struct FirewallPath {
 	rule: FirewallRule
 }
 
-#[derive(Debug, Deserialize)]
-struct DNSPatch {
-	option: String,
-	value: String
-}
-
 // Authenticate users against /etc/shadow
 fn authenticate_user(username: &str, password: &str) -> bool {
 	let hash = shadow::Shadow::from_name(username);
@@ -98,8 +92,8 @@ async fn main() -> tide::Result<()> {
 	app.at("/api/firewall").get(get_firewall);
 	app.at("/api/firewall/rule").put(put_firewall_rule);
 	app.at("/api/firewall/rule").delete(delete_firewall_rule);
-	// app.at("/api/dns").get(get_dns);
-	// app.at("/api/dns").patch(patch_dns);
+	app.at("/api/dns").get(get_dns);
+	app.at("/api/dns").patch(patch_dns);
 	// app.at("/api/leases").get(get_leases);
 	// app.at("/api/mac").post(get_mac);
 	app.at("/api/*").all(err404);
@@ -177,30 +171,23 @@ async fn delete_firewall_rule(mut req: Request<()>) -> tide::Result {
 	Ok("{\"success\": true}".into())
 }
 
-// async fn get_dns(mut req: Request<()>) -> tide::Result {
-// 	let dns_text = fs::read_to_string(Path::new(EZG_ROOT).join("dns.json")).expect("Unable to read file");
-// 	println!("{}", dns_text);
-// 	Ok(dns_text.into())
-// }
+async fn get_dns(mut req: Request<()>) -> tide::Result {
+	let dns_text = fs::read_to_string("/etc/blocky/config.yml").expect("Unable to read file");
+	println!("{}", dns_text);
+	Ok(dns_text.into())
+}
 
-// async fn patch_dns(mut req: Request<()>) -> tide::Result {
-// 	let DNSPatch { option, value } = req.body_json().await?;
-
-// 	// run bash script to add rule
-// 	let output = std::process::Command::new("bash")
-// 		.current_dir(EZG_ROOT)
-// 		.arg(Path::new(EZG_ROOT).join("ezg").to_str().unwrap())
-// 		.arg("dns")
-// 		.arg("set")
-// 		.arg(option)
-// 		.arg(value)
-// 		.output()
-// 		.expect("failed to execute process");
-
-// 	Ok("{\"success\": true}".into())
-// }
-
-// async fn order_shoes(mut req: Request<()>) -> tide::Result {
-// 	let Animal { name, legs } = req.body_json().await?;
-// 	Ok(format!("Hello, {}! I've put in an order for {} shoes", name, legs).into())
-// }
+async fn patch_dns(mut req: Request<()>) -> tide::Result {
+	// rename config.yml to config.yml.bak
+	fs::rename("/etc/blocky/config.yml", "/etc/blocky/config.yml.bak").expect("Unable to rename file");
+	// write config.yml from request body
+	let dns_text = req.body_string().await?;
+	fs::write("/etc/blocky/config.yml", dns_text).expect("Unable to write file");
+	// restart blocky
+	std::process::Command::new("rc-service")
+		.arg("blocky")
+		.arg("restart")
+		.output()
+		.expect("failed to execute process");
+	Ok("{\"success\": true}".into())
+}
