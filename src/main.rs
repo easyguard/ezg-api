@@ -97,6 +97,11 @@ async fn main() -> tide::Result<()> {
 	app.at("/api/dns").patch(patch_dns);
 	app.at("/api/network").get(get_network);
 	app.at("/api/network").patch(patch_network);
+	app.at("/api/ip").get(get_ip);
+	app.at("/api/link").get(get_link);
+	app.at("/api/route").get(get_route);
+	app.at("/api/ping/:host").get(get_ping);
+	app.at("/api/traceroute/:host").get(get_traceroute);
 	// app.at("/api/leases").get(get_leases);
 	// app.at("/api/mac").post(get_mac);
 	app.at("/api/*").all(err404);
@@ -215,4 +220,48 @@ async fn patch_network(mut req: Request<()>) -> tide::Result {
 	let network_text = req.body_string().await?;
 	fs::write(Path::new(CONFIG_ROOT).join("network.toml"), network_text).expect("Unable to write file");
 	Ok("{\"success\": true}".into())
+}
+
+async fn get_ip(mut _req: Request<()>) -> tide::Result {
+	let output = std::process::Command::new("ip")
+		.arg("a")
+		.output()
+		.expect("failed to execute process");
+	Ok(String::from_utf8(output.stdout).unwrap().into())
+}
+
+async fn get_link(mut _req: Request<()>) -> tide::Result {
+	let output = std::process::Command::new("ip")
+		.arg("link")
+		.output()
+		.expect("failed to execute process");
+	Ok(String::from_utf8(output.stdout).unwrap().into())
+}
+
+async fn get_route(mut _req: Request<()>) -> tide::Result {
+	let output = std::process::Command::new("ip")
+		.arg("route")
+		.output()
+		.expect("failed to execute process");
+	Ok(String::from_utf8(output.stdout).unwrap().into())
+}
+
+async fn get_ping(req: Request<()>) -> tide::Result {
+	let host = req.param("host").unwrap();
+	let output = std::process::Command::new("ping")
+		.arg("-c")
+		.arg("1")
+		.arg(host)
+		.output()
+		.expect("failed to execute process");
+	Ok(String::from_utf8(output.stdout).unwrap().into())
+}
+
+async fn get_traceroute(req: Request<()>) -> tide::Result {
+	let host = req.param("host").unwrap();
+	let output = std::process::Command::new("traceroute")
+		.arg(host)
+		.output()
+		.expect("failed to execute process");
+	Ok(String::from_utf8(output.stdout).unwrap().into())
 }
