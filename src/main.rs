@@ -1,6 +1,10 @@
+use async_std::io::prelude::BufReadExt as _;
+use async_std::process::Command;
+use async_std::stream::StreamExt as _;
 use tide::http::headers::HeaderValue;
 use tide::security::CorsMiddleware;
 use tide::security::Origin;
+use tide::sse;
 use tide::Error;
 use tide::Next;
 use tide::Request;
@@ -102,6 +106,30 @@ async fn main() -> tide::Result<()> {
 	app.at("/api/route").get(get_route);
 	app.at("/api/ping/:host").get(get_ping);
 	app.at("/api/traceroute/:host").get(get_traceroute);
+	app.at("/api/devices/:interface").get(sse::endpoint(|req, sender| async move {
+    let interface = req.param("interface").unwrap();
+
+    let mut child = Command::new("arp-scan")
+			.arg("-i")
+			.arg(interface)
+			.arg("-o")
+			.arg("json")
+			.stdout(std::process::Stdio::piped())
+			.spawn()
+			.expect("Failed to start arp-scan");
+
+    if let Some(stdout) = child.stdout.take() {
+			let reader = async_std::io::BufReader::new(stdout);
+			let mut lines = reader.lines();
+
+			while let Some(line) = lines.next().await {
+				let line = line.expect("Failed to read line");
+				sender.send("message", &line, None).await?;
+			}
+    }
+
+    Ok(())
+	}));
 	// app.at("/api/leases").get(get_leases);
 	// app.at("/api/mac").post(get_mac);
 	app.at("/api/*").all(err404);
