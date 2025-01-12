@@ -131,6 +131,8 @@ async fn main() -> tide::Result<()> {
 
     Ok(())
 	}));
+	app.at("/api/apk").post(apk);
+	app.at("/api/world").get(get_world);
 	// app.at("/api/leases").get(get_leases);
 	// app.at("/api/mac").post(get_mac);
 	app.at("/api/*").all(err404);
@@ -305,4 +307,22 @@ async fn get_traceroute(req: Request<()>) -> tide::Result {
 		.output()
 		.expect("failed to execute process");
 	Ok(String::from_utf8(output.stdout).unwrap().into())
+}
+
+async fn apk(mut req: Request<()>) -> tide::Result {
+	// req body: add blah  or   del blah    or something else
+	let apk_text = req.body_string().await?;
+	let apk_text = apk_text.split_whitespace().collect::<Vec<&str>>();
+	let mut command = std::process::Command::new("apk");
+	for arg in apk_text {
+		command.arg(arg);
+	}
+	let output = command.output().expect("failed to execute process");
+	Ok(String::from_utf8(output.stdout).unwrap().into())
+}
+
+async fn get_world(_req: Request<()>) -> tide::Result {
+	let world_text = fs::read_to_string("/etc/apk/world").expect("Unable to read file");
+	println!("{}", world_text);
+	Ok(world_text.into())
 }
