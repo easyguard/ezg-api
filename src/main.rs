@@ -22,7 +22,8 @@ const CONFIG_ROOT: &str = "/etc/config";
 #[derive(Debug, Deserialize)]
 struct FirewallRule {
 	port: u16,
-	protocol: String
+	protocol: String,
+	r#type: String
 }
 
 #[derive(Debug, Deserialize)]
@@ -179,6 +180,12 @@ async fn get_firewall(mut _req: Request<()>) -> tide::Result {
 async fn put_firewall_rule(mut req: Request<()>) -> tide::Result {
 	let FirewallPath { zone, chain, rule } = req.body_json().await?; // { "zone": "zoneName", "chain": "chainName", "rule": {<object to add>} }
 
+	let port = if rule.protocol == "icmp" {
+		rule.r#type
+	} else {
+		rule.port.to_string()
+	};
+
 	// run bash script to add rule
 	std::process::Command::new("limes")
 		// .current_dir(EZG_ROOT)
@@ -189,7 +196,7 @@ async fn put_firewall_rule(mut req: Request<()>) -> tide::Result {
 		.arg(chain)
 		.arg("add")
 		.arg(rule.protocol)
-		.arg(rule.port.to_string())
+		.arg(port)
 		.output()
 		.expect("failed to execute process");
 
@@ -198,6 +205,12 @@ async fn put_firewall_rule(mut req: Request<()>) -> tide::Result {
 
 async fn delete_firewall_rule(mut req: Request<()>) -> tide::Result {
 	let FirewallPath { zone, chain, rule } = req.body_json().await?; // { "zone": "zoneName", "chain": "chainName", "rule": {<object to add>} }
+
+	let port = if rule.protocol == "icmp" {
+		rule.r#type
+	} else {
+		rule.port.to_string()
+	};
 
 	// run bash script to add rule
 	std::process::Command::new("limes")
@@ -209,7 +222,7 @@ async fn delete_firewall_rule(mut req: Request<()>) -> tide::Result {
 		.arg(chain)
 		.arg("remove")
 		.arg(rule.protocol)
-		.arg(rule.port.to_string())
+		.arg(port)
 		.output()
 		.expect("failed to execute process");
 
