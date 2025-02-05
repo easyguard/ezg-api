@@ -108,6 +108,8 @@ async fn main() -> tide::Result<()> {
 	app.at("/api/firewall/templates").get(get_templates);
 	app.at("/api/firewall/template/:template").get(get_template);
 	app.at("/api/firewall/template/:template").patch(patch_template);
+	app.at("/api/firewall/template/:template").delete(delete_template);
+	app.at("/api/firewall/template/:template").put(create_template);
 	app.at("/api/firewall/includes").patch(patch_includes);
 	app.at("/api/dns").get(get_dns);
 	app.at("/api/dns").patch(patch_dns);
@@ -269,6 +271,33 @@ async fn patch_template(mut req: Request<()>) -> tide::Result {
 	let template_text = req.body_string().await?;
 	let template_name = req.param("template").unwrap();
 	fs::write(Path::new(CONFIG_ROOT).join("firewall").join("templates").join(format!("{template_name}.json")), template_text).expect("Unable to write file");
+
+	std::process::Command::new("limes")
+		.arg("apply")
+		.output()
+		.expect("failed to execute process");
+
+	Ok("{\"success\": true}".into())
+}
+
+async fn delete_template(mut req: Request<()>) -> tide::Result {
+	let template_name = req.param("template").unwrap();
+	fs::remove_file(Path::new(CONFIG_ROOT).join("firewall").join("templates").join(format!("{template_name}.json"))).expect("Unable to delete file");
+
+	std::process::Command::new("limes")
+		.arg("apply")
+		.output()
+		.expect("failed to execute process");
+	
+	Ok("{\"success\": true}".into())
+}
+
+async fn create_template(mut req: Request<()>) -> tide::Result {
+	// Create the template directory if it doesn't exist
+	fs::create_dir_all(Path::new(CONFIG_ROOT).join("firewall").join("templates")).expect("Unable to create directory");
+	// Write the template file with default content "[]"
+	let template_name = req.param("template").unwrap();
+	fs::write(Path::new(CONFIG_ROOT).join("firewall").join("templates").join(format!("{template_name}.json")), "[]").expect("Unable to write file");
 	Ok("{\"success\": true}".into())
 }
 
