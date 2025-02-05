@@ -33,6 +33,13 @@ struct FirewallPath {
 	rule: FirewallRule
 }
 
+#[derive(Debug, Deserialize)]
+struct IncludesPatch {
+	zone: String,
+	chain: String,
+	includes: Vec<String>
+}
+
 // Authenticate users against /etc/shadow
 fn authenticate_user(username: &str, password: &str) -> bool {
 	let hash = shadow::Shadow::from_name(username);
@@ -98,6 +105,10 @@ async fn main() -> tide::Result<()> {
 	app.at("/api/firewall").get(get_firewall);
 	app.at("/api/firewall/rule").put(put_firewall_rule);
 	app.at("/api/firewall/rule").delete(delete_firewall_rule);
+	app.at("/api/firewall/templates").get(get_templates);
+	app.at("/api/firewall/template/:template").get(get_template);
+	app.at("/api/firewall/template/:template").patch(patch_template);
+	app.at("/api/firewall/includes").patch(patch_includes);
 	app.at("/api/dns").get(get_dns);
 	app.at("/api/dns").patch(patch_dns);
 	app.at("/api/network").get(get_network);
@@ -137,7 +148,7 @@ async fn main() -> tide::Result<()> {
 	// app.at("/api/mac").post(get_mac);
 	app.at("/api/*").all(err404);
 
-	app.listen("0.0.0.0:8080").await?;
+	app.listen("0.0.0.0:48247").await?;
 	Ok(())
 }
 
@@ -225,6 +236,56 @@ async fn delete_firewall_rule(mut req: Request<()>) -> tide::Result {
 		.arg("remove")
 		.arg(rule.protocol)
 		.arg(port)
+		.output()
+		.expect("failed to execute process");
+
+	Ok("{\"success\": true}".into())
+}
+
+async fn get_templates(mut _req: Request<()>) -> tide::Result {
+	let templates = fs::read_dir(Path::new(CONFIG_ROOT).join("firewall").join("templates"));
+	let mut templates = match templates {
+		Ok(templates) => templates,
+		Err(_) => return Ok("[]".into())
+	};
+	let mut template_list = Vec::new();
+	while let Some(template) = templates.next() {
+		let template = template.unwrap();
+		let template = template.file_name();
+		let template = template.into_string();
+		let template = template.unwrap();
+		template_list.push(template);
+	}
+	Ok(serde_json::to_string(&template_list).unwrap().into())
+}
+
+async fn get_template(req: Request<()>) -> tide::Result {
+	let template_name = req.param("template").unwrap();
+	let template_text = fs::read_to_string(Path::new(CONFIG_ROOT).join("firewall").join("templates").join(format!("{template_name}.json"))).expect("Unable to read file");
+	Ok(template_text.into())
+}
+
+async fn patch_template(mut req: Request<()>) -> tide::Result {
+	let template_text = req.body_string().await?;
+	let template_name = req.param("template").unwrap();
+	fs::write(Path::new(CONFIG_ROOT).join("firewall").join("templates").join(format!("{template_name}.json")), template_text).expect("Unable to write file");
+	Ok("{\"success\": true}".into())
+}
+
+async fn patch_includes(mut req: Request<()>) -> tide::Result {
+	let IncludesPatch { zone, chain, includes } = req.body_json().await?;
+	let includes = serde_json::to_string(&includes).unwrap();
+
+	// run bash script to add rule
+	std::process::Command::new("limes")
+		// .current_dir(EZG_ROOT)
+		// .arg(Path::new(EZG_ROOT).join("ezg").to_str().unwrap())
+		// .arg("firewall")
+		.arg("includes")
+		.arg(zone)
+		.arg(chain)
+		.arg("replace")
+		.arg(includes)
 		.output()
 		.expect("failed to execute process");
 
