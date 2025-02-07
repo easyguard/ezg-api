@@ -280,7 +280,7 @@ async fn patch_template(mut req: Request<()>) -> tide::Result {
 	Ok("{\"success\": true}".into())
 }
 
-async fn delete_template(mut req: Request<()>) -> tide::Result {
+async fn delete_template(req: Request<()>) -> tide::Result {
 	let template_name = req.param("template").unwrap();
 	fs::remove_file(Path::new(CONFIG_ROOT).join("firewall").join("templates").join(format!("{template_name}.json"))).expect("Unable to delete file");
 
@@ -292,7 +292,7 @@ async fn delete_template(mut req: Request<()>) -> tide::Result {
 	Ok("{\"success\": true}".into())
 }
 
-async fn create_template(mut req: Request<()>) -> tide::Result {
+async fn create_template(req: Request<()>) -> tide::Result {
 	// Create the template directory if it doesn't exist
 	fs::create_dir_all(Path::new(CONFIG_ROOT).join("firewall").join("templates")).expect("Unable to create directory");
 	// Write the template file with default content "[]"
