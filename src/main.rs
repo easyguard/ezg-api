@@ -144,6 +144,8 @@ async fn main() -> tide::Result<()> {
 
     Ok(())
 	}));
+	app.at("/api/aliases").get(get_aliases);
+	app.at("/api/aliases").patch(patch_aliases);
 	app.at("/api/apk").post(apk);
 	app.at("/api/world").get(get_world);
 	// app.at("/api/leases").get(get_leases);
@@ -398,6 +400,22 @@ async fn get_traceroute(req: Request<()>) -> tide::Result {
 		.output()
 		.expect("failed to execute process");
 	Ok(String::from_utf8(output.stdout).unwrap().into())
+}
+
+async fn get_aliases(mut _req: Request<()>) -> tide::Result {
+	let aliases_text = fs::read_to_string("/etc/config/aliases");
+	if aliases_text.is_err() {
+		return Ok("".into());
+	}
+	let aliases_text = aliases_text.unwrap();
+	println!("{}", aliases_text);
+	Ok(aliases_text.into())
+}
+
+async fn patch_aliases(mut req: Request<()>) -> tide::Result {
+	let aliases_text = req.body_string().await?;
+	fs::write("/etc/config/aliases", aliases_text).expect("Unable to write file");
+	Ok("{\"success\": true}".into())
 }
 
 async fn apk(mut req: Request<()>) -> tide::Result {
