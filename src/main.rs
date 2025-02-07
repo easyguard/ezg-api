@@ -393,6 +393,7 @@ async fn get_ping(req: Request<()>) -> tide::Result {
 async fn get_traceroute(req: Request<()>) -> tide::Result {
 	let host = req.param("host").unwrap();
 	let output = std::process::Command::new("traceroute")
+		.arg("-I")
 		.arg(host)
 		.output()
 		.expect("failed to execute process");
