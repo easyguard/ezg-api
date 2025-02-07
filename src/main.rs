@@ -1,6 +1,7 @@
 use async_std::io::prelude::BufReadExt as _;
 use async_std::process::Command;
 use async_std::stream::StreamExt as _;
+use firewall::FirewallConfig;
 use tide::http::headers::HeaderValue;
 use tide::security::CorsMiddleware;
 use tide::security::Origin;
@@ -15,6 +16,8 @@ use std::fs;
 use std::future::Future;
 use std::path::Path;
 use std::pin::Pin;
+
+mod firewall;
 
 // const EZG_ROOT: &str = "/etc/easyguard";
 const CONFIG_ROOT: &str = "/etc/config";
@@ -284,6 +287,37 @@ async fn patch_template(mut req: Request<()>) -> tide::Result {
 
 async fn delete_template(req: Request<()>) -> tide::Result {
 	let template_name = req.param("template").unwrap();
+	// Load in the firewall.json and make sure the template isn't in ANY "include" array, if there is, return an error
+	let firewall_text = fs::read_to_string(Path::new(CONFIG_ROOT).join("firewall.json")).expect("Unable to read file");
+	let firewall_json: FirewallConfig = serde_json::from_str(&firewall_text).expect("Unable to parse JSON");
+	for zone in firewall_json.zones {
+		if zone.input.is_some() {
+			let input = zone.input.unwrap();
+			if input.include.is_some() {
+				let includes = input.include.unwrap();
+				for include in includes {
+					if include == template_name {
+						return Ok(format!("{{\"error\": \"Template is in use by {}/input\"}}", zone.name).into());
+					}
+				}
+			}
+		}
+		if zone.forward.is_some() {
+			let forwards = zone.forward.unwrap();
+			for forward in forwards {
+				if forward.include.is_none() {
+					continue;
+				}
+				for include in forward.include.unwrap() {
+					if include == template_name {
+						return Ok(format!("{{\"error\": \"Template is in use by {}/forward/{}\"}}", zone.name, forward.dest).into());
+					}
+				}
+			}
+		}
+	}
+
+
 	fs::remove_file(Path::new(CONFIG_ROOT).join("firewall").join("templates").join(format!("{template_name}.json"))).expect("Unable to delete file");
 
 	std::process::Command::new("limes")
