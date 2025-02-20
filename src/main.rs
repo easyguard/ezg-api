@@ -2,20 +2,20 @@ use async_std::io::prelude::BufReadExt as _;
 use async_std::process::Command;
 use async_std::stream::StreamExt as _;
 use firewall::FirewallConfig;
+use std::fs;
+use std::future::Future;
+use std::path::Path;
+use std::pin::Pin;
 use tide::http::headers::HeaderValue;
+use tide::prelude::*;
 use tide::security::CorsMiddleware;
 use tide::security::Origin;
 use tide::sse;
 use tide::Error;
 use tide::Next;
 use tide::Request;
-use tide::prelude::*;
 use tide::Response;
 use tide::StatusCode;
-use std::fs;
-use std::future::Future;
-use std::path::Path;
-use std::pin::Pin;
 
 mod firewall;
 
@@ -26,21 +26,21 @@ const CONFIG_ROOT: &str = "/etc/config";
 struct FirewallRule {
 	port: u16,
 	protocol: String,
-	r#type: String
+	r#type: String,
 }
 
 #[derive(Debug, Deserialize)]
 struct FirewallPath {
 	zone: String,
 	chain: String,
-	rule: FirewallRule
+	rule: FirewallRule,
 }
 
 #[derive(Debug, Deserialize)]
 struct IncludesPatch {
 	zone: String,
 	chain: String,
-	includes: Vec<String>
+	includes: Vec<String>,
 }
 
 // Authenticate users against /etc/shadow
@@ -89,9 +89,7 @@ fn auth_middleware<'a>(
 		let res = Response::new(StatusCode::Unauthorized);
 		return Box::pin(async { Ok(res.into()) });
 	}
-	Box::pin(async move {
-		Ok(next.run(request).await)
-	})
+	Box::pin(async move { Ok(next.run(request).await) })
 }
 
 #[async_std::main]
@@ -99,9 +97,13 @@ async fn main() -> tide::Result<()> {
 	let mut app = tide::new();
 
 	let cors = CorsMiddleware::new()
-    .allow_methods("GET, PUT, DELETE, POST, PATCH, OPTIONS".parse::<HeaderValue>().unwrap())
-    .allow_origin(Origin::from("*"))
-    .allow_credentials(false);
+		.allow_methods(
+			"GET, PUT, DELETE, POST, PATCH, OPTIONS"
+				.parse::<HeaderValue>()
+				.unwrap(),
+		)
+		.allow_origin(Origin::from("*"))
+		.allow_credentials(false);
 	app.with(cors);
 
 	// Require authentication for all routes
@@ -113,9 +115,12 @@ async fn main() -> tide::Result<()> {
 	app.at("/api/firewall/rule").delete(delete_firewall_rule);
 	app.at("/api/firewall/templates").get(get_templates);
 	app.at("/api/firewall/template/:template").get(get_template);
-	app.at("/api/firewall/template/:template").patch(patch_template);
-	app.at("/api/firewall/template/:template").delete(delete_template);
-	app.at("/api/firewall/template/:template").put(create_template);
+	app.at("/api/firewall/template/:template")
+		.patch(patch_template);
+	app.at("/api/firewall/template/:template")
+		.delete(delete_template);
+	app.at("/api/firewall/template/:template")
+		.put(create_template);
 	app.at("/api/firewall/includes").patch(patch_includes);
 	app.at("/api/dns").get(get_dns);
 	app.at("/api/dns").patch(patch_dns);
@@ -126,30 +131,31 @@ async fn main() -> tide::Result<()> {
 	app.at("/api/route").get(get_route);
 	app.at("/api/ping/:host").get(get_ping);
 	app.at("/api/traceroute/:host").get(get_traceroute);
-	app.at("/api/devices/:interface").get(sse::endpoint(|req, sender| async move {
-    let interface = req.param("interface").unwrap();
+	app.at("/api/devices/:interface")
+		.get(sse::endpoint(|req, sender| async move {
+			let interface = req.param("interface").unwrap();
 
-    let mut child = Command::new("arp-scan")
-			.arg("-i")
-			.arg(interface)
-			.arg("-o")
-			.arg("json")
-			.stdout(std::process::Stdio::piped())
-			.spawn()
-			.expect("Failed to start arp-scan");
+			let mut child = Command::new("arp-scan")
+				.arg("-i")
+				.arg(interface)
+				.arg("-o")
+				.arg("json")
+				.stdout(std::process::Stdio::piped())
+				.spawn()
+				.expect("Failed to start arp-scan");
 
-    if let Some(stdout) = child.stdout.take() {
-			let reader = async_std::io::BufReader::new(stdout);
-			let mut lines = reader.lines();
+			if let Some(stdout) = child.stdout.take() {
+				let reader = async_std::io::BufReader::new(stdout);
+				let mut lines = reader.lines();
 
-			while let Some(line) = lines.next().await {
-				let line = line.expect("Failed to read line");
-				sender.send("message", &line, None).await?;
+				while let Some(line) = lines.next().await {
+					let line = line.expect("Failed to read line");
+					sender.send("message", &line, None).await?;
+				}
 			}
-    }
 
-    Ok(())
-	}));
+			Ok(())
+		}));
 	app.at("/api/aliases").get(get_aliases);
 	app.at("/api/aliases").patch(patch_aliases);
 	app.at("/api/apk").post(apk);
@@ -176,7 +182,8 @@ async fn commit(mut _req: Request<()>) -> tide::Result {
 }
 
 async fn get_firewall(mut _req: Request<()>) -> tide::Result {
-	let firewall_text = fs::read_to_string(Path::new(CONFIG_ROOT).join("firewall.json")).expect("Unable to read file");
+	let firewall_text = fs::read_to_string(Path::new(CONFIG_ROOT).join("firewall.json"))
+		.expect("Unable to read file");
 	println!("{}", firewall_text);
 	Ok(firewall_text.into())
 }
@@ -256,7 +263,7 @@ async fn get_templates(mut _req: Request<()>) -> tide::Result {
 	let templates = fs::read_dir(Path::new(CONFIG_ROOT).join("firewall").join("templates"));
 	let mut templates = match templates {
 		Ok(templates) => templates,
-		Err(_) => return Ok("[]".into())
+		Err(_) => return Ok("[]".into()),
 	};
 	let mut template_list = Vec::new();
 	while let Some(template) = templates.next() {
@@ -274,9 +281,14 @@ async fn get_template(req: Request<()>) -> tide::Result {
 	if template_name.contains("..") || template_name.contains("/") {
 		return Err(tide::Error::from_str(400, "Invalid template name"));
 	}
-	let template_text = match fs::read_to_string(Path::new(CONFIG_ROOT).join("firewall").join("templates").join(format!("{template_name}.json"))) {
+	let template_text = match fs::read_to_string(
+		Path::new(CONFIG_ROOT)
+			.join("firewall")
+			.join("templates")
+			.join(format!("{template_name}.json")),
+	) {
 		Ok(template_text) => template_text,
-		Err(_) => return Ok(Response::new(StatusCode::BadRequest))
+		Err(_) => return Ok(Response::new(StatusCode::BadRequest)),
 	};
 	Ok(template_text.into())
 }
@@ -287,9 +299,15 @@ async fn patch_template(mut req: Request<()>) -> tide::Result {
 	if template_name.contains("..") || template_name.contains("/") {
 		return Err(tide::Error::from_str(400, "Invalid template name"));
 	}
-	match fs::write(Path::new(CONFIG_ROOT).join("firewall").join("templates").join(format!("{template_name}.json")), template_text) {
-		Ok(_) => {},
-		Err(_) => return Ok(Response::new(StatusCode::BadRequest))
+	match fs::write(
+		Path::new(CONFIG_ROOT)
+			.join("firewall")
+			.join("templates")
+			.join(format!("{template_name}.json")),
+		template_text,
+	) {
+		Ok(_) => {}
+		Err(_) => return Ok(Response::new(StatusCode::BadRequest)),
 	}
 
 	std::process::Command::new("limes")
@@ -306,8 +324,10 @@ async fn delete_template(req: Request<()>) -> tide::Result {
 		return Err(tide::Error::from_str(400, "Invalid template name"));
 	}
 	// Load in the firewall.json and make sure the template isn't in ANY "include" array, if there is, return an error
-	let firewall_text = fs::read_to_string(Path::new(CONFIG_ROOT).join("firewall.json")).expect("Unable to read firewall.json");
-	let firewall_json: FirewallConfig = serde_json::from_str(&firewall_text).expect("Unable to parse JSON");
+	let firewall_text = fs::read_to_string(Path::new(CONFIG_ROOT).join("firewall.json"))
+		.expect("Unable to read firewall.json");
+	let firewall_json: FirewallConfig =
+		serde_json::from_str(&firewall_text).expect("Unable to parse JSON");
 	for zone in firewall_json.zones {
 		if zone.input.is_some() {
 			let input = zone.input.unwrap();
@@ -315,7 +335,11 @@ async fn delete_template(req: Request<()>) -> tide::Result {
 				let includes = input.include.unwrap();
 				for include in includes {
 					if include == template_name {
-						return Ok(format!("{{\"error\": \"Template is in use by {}/input\"}}", zone.name).into());
+						return Ok(format!(
+							"{{\"error\": \"Template is in use by {}/input\"}}",
+							zone.name
+						)
+						.into());
 					}
 				}
 			}
@@ -328,38 +352,58 @@ async fn delete_template(req: Request<()>) -> tide::Result {
 				}
 				for include in forward.include.unwrap() {
 					if include == template_name {
-						return Ok(format!("{{\"error\": \"Template is in use by {}/forward/{}\"}}", zone.name, forward.dest).into());
+						return Ok(format!(
+							"{{\"error\": \"Template is in use by {}/forward/{}\"}}",
+							zone.name, forward.dest
+						)
+						.into());
 					}
 				}
 			}
 		}
 	}
 
-
-	match fs::remove_file(Path::new(CONFIG_ROOT).join("firewall").join("templates").join(format!("{template_name}.json"))) {
-		Ok(_) => {},
-		Err(_) => return Ok(Response::new(StatusCode::BadRequest))
+	match fs::remove_file(
+		Path::new(CONFIG_ROOT)
+			.join("firewall")
+			.join("templates")
+			.join(format!("{template_name}.json")),
+	) {
+		Ok(_) => {}
+		Err(_) => return Ok(Response::new(StatusCode::BadRequest)),
 	}
 
 	std::process::Command::new("limes")
 		.arg("apply")
 		.output()
 		.expect("failed to execute process");
-	
+
 	Ok("{\"success\": true}".into())
 }
 
 async fn create_template(req: Request<()>) -> tide::Result {
 	// Create the template directory if it doesn't exist
-	fs::create_dir_all(Path::new(CONFIG_ROOT).join("firewall").join("templates")).expect("Unable to create directory");
+	fs::create_dir_all(Path::new(CONFIG_ROOT).join("firewall").join("templates"))
+		.expect("Unable to create directory");
 	// Write the template file with default content "[]"
 	let template_name = req.param("template").unwrap();
-	fs::write(Path::new(CONFIG_ROOT).join("firewall").join("templates").join(format!("{template_name}.json")), "[]").expect("Unable to write file");
+	fs::write(
+		Path::new(CONFIG_ROOT)
+			.join("firewall")
+			.join("templates")
+			.join(format!("{template_name}.json")),
+		"[]",
+	)
+	.expect("Unable to write file");
 	Ok("{\"success\": true}".into())
 }
 
 async fn patch_includes(mut req: Request<()>) -> tide::Result {
-	let IncludesPatch { zone, chain, includes } = req.body_json().await?;
+	let IncludesPatch {
+		zone,
+		chain,
+		includes,
+	} = req.body_json().await?;
 	let includes = serde_json::to_string(&includes).unwrap();
 
 	// run bash script to add rule
@@ -386,7 +430,8 @@ async fn get_dns(mut _req: Request<()>) -> tide::Result {
 
 async fn patch_dns(mut req: Request<()>) -> tide::Result {
 	// rename config.yml to config.yml.bak
-	fs::rename("/etc/blocky/config.yml", "/etc/blocky/config.yml.bak").expect("Unable to rename file");
+	fs::rename("/etc/blocky/config.yml", "/etc/blocky/config.yml.bak")
+		.expect("Unable to rename file");
 	// write config.yml from request body
 	let dns_text = req.body_string().await?;
 	fs::write("/etc/blocky/config.yml", dns_text).expect("Unable to write file");
@@ -400,15 +445,21 @@ async fn patch_dns(mut req: Request<()>) -> tide::Result {
 }
 
 async fn get_network(mut _req: Request<()>) -> tide::Result {
-	let network_text = fs::read_to_string(Path::new(CONFIG_ROOT).join("network.toml")).expect("Unable to read file");
+	let network_text = fs::read_to_string(Path::new(CONFIG_ROOT).join("network.toml"))
+		.expect("Unable to read file");
 	println!("{}", network_text);
 	Ok(network_text.into())
 }
 
 async fn patch_network(mut req: Request<()>) -> tide::Result {
-	fs::rename(Path::new(CONFIG_ROOT).join("network.toml"), Path::new(CONFIG_ROOT).join("network.toml.bak")).expect("Unable to rename file");
+	fs::rename(
+		Path::new(CONFIG_ROOT).join("network.toml"),
+		Path::new(CONFIG_ROOT).join("network.toml.bak"),
+	)
+	.expect("Unable to rename file");
 	let network_text = req.body_string().await?;
-	fs::write(Path::new(CONFIG_ROOT).join("network.toml"), network_text).expect("Unable to write file");
+	fs::write(Path::new(CONFIG_ROOT).join("network.toml"), network_text)
+		.expect("Unable to write file");
 	Ok("{\"success\": true}".into())
 }
 
