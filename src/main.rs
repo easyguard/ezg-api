@@ -73,7 +73,10 @@ fn auth_middleware<'a>(
 		return Box::pin(async { Ok(res.into()) });
 	}
 	let auth_header = auth_header[1];
-	let auth_header = base64::decode(auth_header).unwrap();
+	let auth_header = match base64::decode(auth_header) {
+		Ok(decoded) => decoded,
+		Err(_) => return Box::pin(async { Ok(Response::new(StatusCode::BadRequest)) }),
+	};
 	let auth_header = String::from_utf8(auth_header).unwrap();
 	let auth_header = auth_header.split(":").collect::<Vec<&str>>();
 	if auth_header.len() != 2 {
@@ -268,14 +271,26 @@ async fn get_templates(mut _req: Request<()>) -> tide::Result {
 
 async fn get_template(req: Request<()>) -> tide::Result {
 	let template_name = req.param("template").unwrap();
-	let template_text = fs::read_to_string(Path::new(CONFIG_ROOT).join("firewall").join("templates").join(format!("{template_name}.json"))).expect("Unable to read file");
+	if template_name.contains("..") || template_name.contains("/") {
+		return Err(tide::Error::from_str(400, "Invalid template name"));
+	}
+	let template_text = match fs::read_to_string(Path::new(CONFIG_ROOT).join("firewall").join("templates").join(format!("{template_name}.json"))) {
+		Ok(template_text) => template_text,
+		Err(_) => return Ok(Response::new(StatusCode::BadRequest))
+	};
 	Ok(template_text.into())
 }
 
 async fn patch_template(mut req: Request<()>) -> tide::Result {
 	let template_text = req.body_string().await?;
 	let template_name = req.param("template").unwrap();
-	fs::write(Path::new(CONFIG_ROOT).join("firewall").join("templates").join(format!("{template_name}.json")), template_text).expect("Unable to write file");
+	if template_name.contains("..") || template_name.contains("/") {
+		return Err(tide::Error::from_str(400, "Invalid template name"));
+	}
+	match fs::write(Path::new(CONFIG_ROOT).join("firewall").join("templates").join(format!("{template_name}.json")), template_text) {
+		Ok(_) => {},
+		Err(_) => return Ok(Response::new(StatusCode::BadRequest))
+	}
 
 	std::process::Command::new("limes")
 		.arg("apply")
@@ -287,8 +302,11 @@ async fn patch_template(mut req: Request<()>) -> tide::Result {
 
 async fn delete_template(req: Request<()>) -> tide::Result {
 	let template_name = req.param("template").unwrap();
+	if template_name.contains("..") || template_name.contains("/") {
+		return Err(tide::Error::from_str(400, "Invalid template name"));
+	}
 	// Load in the firewall.json and make sure the template isn't in ANY "include" array, if there is, return an error
-	let firewall_text = fs::read_to_string(Path::new(CONFIG_ROOT).join("firewall.json")).expect("Unable to read file");
+	let firewall_text = fs::read_to_string(Path::new(CONFIG_ROOT).join("firewall.json")).expect("Unable to read firewall.json");
 	let firewall_json: FirewallConfig = serde_json::from_str(&firewall_text).expect("Unable to parse JSON");
 	for zone in firewall_json.zones {
 		if zone.input.is_some() {
@@ -318,7 +336,10 @@ async fn delete_template(req: Request<()>) -> tide::Result {
 	}
 
 
-	fs::remove_file(Path::new(CONFIG_ROOT).join("firewall").join("templates").join(format!("{template_name}.json"))).expect("Unable to delete file");
+	match fs::remove_file(Path::new(CONFIG_ROOT).join("firewall").join("templates").join(format!("{template_name}.json"))) {
+		Ok(_) => {},
+		Err(_) => return Ok(Response::new(StatusCode::BadRequest))
+	}
 
 	std::process::Command::new("limes")
 		.arg("apply")
