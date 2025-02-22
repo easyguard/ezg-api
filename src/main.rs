@@ -121,6 +121,7 @@ async fn main() -> tide::Result<()> {
 				.unwrap(),
 		)
 		.allow_origin(Origin::from("*"))
+		.allow_headers("Authorization".parse::<HeaderValue>().unwrap())
 		.allow_credentials(false);
 	app.with(cors);
 
