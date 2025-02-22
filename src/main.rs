@@ -6,6 +6,7 @@ use std::fs;
 use std::future::Future;
 use std::path::Path;
 use std::pin::Pin;
+use std::sync::Mutex;
 use tide::http::headers::HeaderValue;
 use tide::prelude::*;
 use tide::security::CorsMiddleware;
@@ -16,6 +17,7 @@ use tide::Next;
 use tide::Request;
 use tide::Response;
 use tide::StatusCode;
+use lazy_static::lazy_static;
 
 mod firewall;
 
@@ -43,8 +45,13 @@ struct IncludesPatch {
 	includes: Vec<String>,
 }
 
+lazy_static! {
+	static ref SHADOW_MUTEX: Mutex<()> = Mutex::new(());
+}
+
 // Authenticate users against /etc/shadow
 fn authenticate_user(username: &str, password: &str) -> bool {
+	let _lock = SHADOW_MUTEX.lock().unwrap();
 	let hash = shadow::Shadow::from_name(username);
 	if hash.is_none() {
 		return false;
