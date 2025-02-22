@@ -54,10 +54,14 @@ fn authenticate_user(username: &str, password: &str) -> bool {
 	let _lock = SHADOW_MUTEX.lock().unwrap();
 	let hash = shadow::Shadow::from_name(username);
 	if hash.is_none() {
+		println!("User not found: {username}");
 		return false;
 	}
 	let hash = hash.unwrap();
 	let correct = pwhash::unix::verify(password, &hash.password);
+	if !correct {
+		println!("Incorrect password for {username}: {password}");
+	}
 	return correct;
 }
 
@@ -68,6 +72,7 @@ fn auth_middleware<'a>(
 	// Authorization: Basic <base64(username:password)>
 	let auth_header = request.header("Authorization");
 	if auth_header.is_none() {
+		println!("No auth header");
 		let res = Response::new(StatusCode::Unauthorized);
 		return Box::pin(async { Ok(res) });
 	}
@@ -76,23 +81,29 @@ fn auth_middleware<'a>(
 	let auth_header = auth_header.as_str();
 	let auth_header = auth_header.split_whitespace().collect::<Vec<&str>>();
 	if auth_header.len() != 2 {
+		println!("Invalid auth header format");
 		let res = Response::new(StatusCode::Unauthorized);
 		return Box::pin(async { Ok(res.into()) });
 	}
 	let auth_header = auth_header[1];
 	let auth_header = match base64::decode(auth_header) {
 		Ok(decoded) => decoded,
-		Err(_) => return Box::pin(async { Ok(Response::new(StatusCode::BadRequest)) }),
+		Err(_) => {
+			println!("Failed to decode auth header");
+			return Box::pin(async { Ok(Response::new(StatusCode::BadRequest)) })
+		}
 	};
 	let auth_header = String::from_utf8(auth_header).unwrap();
 	let auth_header = auth_header.split(":").collect::<Vec<&str>>();
 	if auth_header.len() != 2 {
+		println!("Invalid auth header content");
 		let res = Response::new(StatusCode::Unauthorized);
 		return Box::pin(async { Ok(res.into()) });
 	}
 	let username = auth_header[0];
 	let password = auth_header[1];
 	if !authenticate_user(username, password) {
+		println!("Failed to authenticate user");
 		let res = Response::new(StatusCode::Unauthorized);
 		return Box::pin(async { Ok(res.into()) });
 	}
