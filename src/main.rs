@@ -179,6 +179,7 @@ async fn main() -> tide::Result<()> {
 	app.at("/api/aliases").patch(patch_aliases);
 	app.at("/api/apk").post(apk);
 	app.at("/api/world").get(get_world);
+	app.at("/api/netd/reload").post(netd_reload);
 	// app.at("/api/leases").get(get_leases);
 	// app.at("/api/mac").post(get_mac);
 	app.at("/api/*").all(err404);
@@ -559,4 +560,13 @@ async fn get_world(_req: Request<()>) -> tide::Result {
 	let world_text = fs::read_to_string("/etc/apk/world").expect("Unable to read file");
 	println!("{}", world_text);
 	Ok(world_text.into())
+}
+
+async fn netd_reload(_req: Request<()>) -> tide::Result {
+	std::process::Command::new("netd")
+		.arg("reload")
+		.arg("-y")
+		.output()
+		.expect("failed to execute process");
+	Ok("{\"success\": true}".into())
 }
